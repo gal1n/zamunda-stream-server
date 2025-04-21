@@ -1,95 +1,50 @@
-const serverUrl = 'https://zamunda-stream-server.onrender.com/stream'; // URL на сървъра
-const debugElement = document.getElementById('debug'); // Елемент за дебъг съобщения
-const magnetInput = document.getElementById('magnetInput'); // Поле за магнит линк
-const fileListElement = document.getElementById('fileList'); // Списък с файловете
-const videoElement = document.getElementById('videoPlayer'); // Видео елемент
 
-// Функция за дебъг съобщения
-function debug(message) {
-  const timestamp = new Date().toLocaleTimeString();
-  console.log(`[${timestamp}] ${message}`);
-  const debugMessage = document.createElement('div');
-  debugMessage.textContent = `[${timestamp}] ${message}`;
-  debugElement.appendChild(debugMessage);
+const SERVER_URL = 'https://zamunda-stream-server.onrender.com';
+const player = videojs('videoPlayer');
+const logArea = document.getElementById('log');
+const fileListArea = document.getElementById('fileList');
+
+function log(msg) {
+  const time = new Date().toLocaleTimeString();
+  const entry = document.createElement('div');
+  entry.textContent = `[${time}] ${msg}`;
+  logArea.appendChild(entry);
+  logArea.scrollTop = logArea.scrollHeight;
 }
 
-// Функция за обработка на избора на локален .torrent файл
-function handleFileSelect(event) {
-  const file = event.target.files[0];
-  if (file && file.name.endsWith('.torrent')) {
-    debug('📁 Зареждам локален .torrent файл...');
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      const torrentData = e.target.result;
-      debug('🔗 Изпращам локален .torrent файл към сървъра...');
-      fetch(`${serverUrl}?torrentData=${encodeURIComponent(torrentData)}`, {
-        method: 'POST',
-        body: torrentData,
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.files && data.files.length > 0) {
-          debug('🔗 Успешно изпратен локален .torrent файл към сървъра.');
-          loadTorrentFiles(data.files);
-        } else {
-          debug('❌ Няма налични видео файлове в торента.');
-        }
-      })
-      .catch(err => debug(`❌ Грешка: ${err.message}`));
-    };
-    reader.readAsArrayBuffer(file);
-  } else {
-    debug('⚠️ Моля, изберете валиден .torrent файл.');
+document.getElementById('magnetBtn').onclick = () => {
+  const magnet = document.getElementById('magnetInput').value.trim();
+  if (!magnet) return alert('Въведи magnet линк');
+  fetchFileList(magnet);
+};
+
+async function fetchFileList(magnetURI) {
+  log('🔗 Изпращам magnet линк към сървъра: ' + magnetURI);
+  try {
+    const res = await fetch(`${SERVER_URL}/get-files?magnet=${encodeURIComponent(magnetURI)}`);
+    const data = await res.json();
+    if (!Array.isArray(data.files)) {
+      log('❌ Грешка: Невалиден списък с файлове');
+      return;
+    }
+    log('🎬 Налични видео файлове: ' + data.files.join(', '));
+    displayFileList(data.files, magnetURI);
+  } catch (err) {
+    log('❌ Грешка: ' + err);
   }
 }
 
-// Функция за зареждане на магнит линк
-function loadMagnetLink() {
-  const magnet = magnetInput.value.trim();
-  if (magnet) {
-    debug(`🔗 Изпращам magnet линк към сървъра: ${magnet}`);
-    fetch(`${serverUrl}?magnet=${encodeURIComponent(magnet)}`)
-      .then(response => response.json())
-      .then(data => {
-        if (data.files && data.files.length > 0) {
-          debug('🔗 Успешно изпратен magnet линк към сървъра.');
-          loadTorrentFiles(data.files);
-        } else {
-          debug('❌ Няма налични видео файлове в торента.');
-        }
-      })
-      .catch(err => debug(`❌ Грешка: ${err.message}`));
-  } else {
-    debug('⚠️ Моля, въведете валиден magnet линк.');
-  }
-}
-
-// Функция за зареждане на видео файлове от отговор от сървъра
-function loadTorrentFiles(files) {
-  fileListElement.innerHTML = ''; // Изчистваме списъка с файлове
-
-  // Вземаме файловете от отговора на сървъра
-  files.forEach(fileName => {
-    const fileElement = document.createElement('div');
-    const fileButton = document.createElement('button');
-    fileButton.textContent = `Пусни: ${fileName}`;
-    fileButton.onclick = function() {
-      playFile(fileName);
+function displayFileList(files, magnetURI) {
+  fileListArea.innerHTML = '';
+  files.forEach(file => {
+    const btn = document.createElement('button');
+    btn.textContent = `▶️ Пусни: ${file}`;
+    btn.onclick = () => {
+      const videoURL = `${SERVER_URL}/stream?magnet=${encodeURIComponent(magnetURI)}&filename=${encodeURIComponent(file)}`;
+      log('📽️ Стартирам видео: ' + file);
+      player.src({ type: 'video/mp4', src: videoURL });
+      player.play();
     };
-    fileElement.appendChild(fileButton);
-    fileListElement.appendChild(fileElement);
+    fileListArea.appendChild(btn);
   });
-
-  debug(`📂 Намерени видео файлове: ${files.length}`);
 }
-
-// Функция за възпроизвеждане на видео файл
-function playFile(fileName) {
-  const fileUrl = `${serverUrl}?file=${fileName}`;
-  videoElement.src = fileUrl;
-  videoElement.play();
-  debug(`▶️ Възпроизвеждам видео: ${fileName}`);
-}
-
-document.getElementById('magnetButton').addEventListener('click', loadMagnetLink);
-document.getElementById('fileInput').addEventListener('change', handleFileSelect);
