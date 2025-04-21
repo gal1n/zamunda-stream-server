@@ -1,24 +1,22 @@
-const express = require('express');
-const WebTorrent = require('webtorrent');
-const cors = require('cors');
-
-const app = express();
-const client = new WebTorrent();
-app.use(cors());
-
-const PORT = process.env.PORT || 3000;
-
 app.get('/stream', (req, res) => {
   const magnet = req.query.magnet;
-  if (!magnet) return res.status(400).send('Липсва magnet линк');
+  if (!magnet) {
+    console.log('⚠️ Липсва magnet линк');
+    return res.status(400).send('Липсва magnet линк');
+  }
 
-  console.log('⏳ Добавям торент:', magnet);
+  console.log(`⏳ Получен е magnet линк: ${magnet}`);
 
   client.add(magnet, torrent => {
-    const file = torrent.files.find(f => f.name.match(/\.(mp4|mkv|webm|avi)$/i));
-    if (!file) return res.status(404).send('Не е намерен видео файл');
+    console.log(`🎬 Добавям торент: ${torrent.infoHash}`);
 
-    console.log('▶️ Стрийм файл:', file.name);
+    const file = torrent.files.find(f => f.name.match(/\.(mp4|mkv|webm|avi)$/i));
+    if (!file) {
+      console.log('⚠️ Не е намерен видео файл');
+      return res.status(404).send('Не е намерен видео файл');
+    }
+
+    console.log(`▶️ Стрийм файл: ${file.name}`);
 
     res.setHeader('Content-Type', 'video/mp4');
     res.setHeader('Accept-Ranges', 'bytes');
@@ -38,8 +36,8 @@ app.get('/stream', (req, res) => {
       file.createReadStream().pipe(res);
     }
   });
-});
 
-app.listen(PORT, () => {
-  console.log(`✅ WebTorrent сървърът работи на http://localhost:${PORT}`);
+  client.on('torrent', function(torrent) {
+    console.log(`🟢 Свързан с пийър: ${torrent.infoHash}`);
+  });
 });
